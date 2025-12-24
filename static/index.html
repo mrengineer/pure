@@ -1,0 +1,26 @@
+<html>
+<body>
+<h1>Статус: Работает</h1>
+<span id="time"></span>
+<button onclick="ping()">Ping</button>
+<span id="pong_span"></span>
+<script>
+var client_id = Math.random().toString(36).substr(2, 9);
+var evtSource = new EventSource('/sse?client_id=' + client_id);
+evtSource.onmessage = function(e) {
+    document.getElementById('time').innerText = e.data;
+};
+function ping() {
+    fetch('/command', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({command: 'ping', client_id: client_id})
+    }).then(response => response.json()).then(data => {
+        if (data.dom_id && data.payload) {
+            document.getElementById(data.dom_id).innerText = data.payload;
+        }
+    });
+}
+</script>
+</body>
+</html>
