@@ -1,26 +1,50 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Air Purifier Control</title>
+</head>
 <body>
-<h1>Статус: Работает</h1>
-<span id="time"></span>
-<button onclick="ping()">Ping</button>
-<span id="pong_span"></span>
-<script>
-var client_id = Math.random().toString(36).substr(2, 9);
-var evtSource = new EventSource('/sse?client_id=' + client_id);
-evtSource.onmessage = function(e) {
-    document.getElementById('time').innerText = e.data;
-};
-function ping() {
-    fetch('/command', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({command: 'ping', client_id: client_id})
-    }).then(response => response.json()).then(data => {
-        if (data.dom_id && data.payload) {
-            document.getElementById(data.dom_id).innerText = data.payload;
+    <p>Status: Working</p>
+    <span id="time_span">Loading time...</span>
+    <button onclick="sendPing()">Ping</button>
+    <span id="pong_span"></span>
+
+    <script>
+        let client_id = Math.random().toString(36).substring(2);  // Генерация уникального client_id
+
+        // Подключение WebSocket
+        const ws = new WebSocket('ws://' + location.host + '/ws?client_id=' + client_id);
+
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+        };
+
+        ws.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                // Проверяем client_id (если пустой — для всех)
+                if (data.client_id === client_id || !data.client_id) {
+                    if (data.dom_id && data.payload) {
+                        document.getElementById(data.dom_id).innerText = data.payload;
+                    }
+                }
+            } catch (e) {
+                console.error('Invalid JSON:', e);
+            }
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket closed');
+        };
+
+        function sendPing() {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({command: 'ping', client_id: client_id}));
+            } else {
+                console.error('WebSocket not open');
+            }
         }
-    });
-}
-</script>
+    </script>
 </body>
 </html>
