@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Raspberry Pi Web Server
 
 Simple web server in C++ for Raspberry Pi using the Mongoose library. Supports Server-Sent Events (SSE) for real-time time updates and command handling via POST requests in JSON.
@@ -52,3 +53,7 @@ The server will start on port 8000. Open http://localhost:8000 in your browser.
 ## License
 
 [MIT](LICENSE) or add your own.
+=======
+# pure
+App for raspberry pi to control DIY air purifier
+>>>>>>> origin/main
