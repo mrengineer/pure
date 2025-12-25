@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pure + WebUI Bind</title>
+    <meta charset="UTF-8">
+    <script src="webui.js"></script> <!-- БЕЗ ЭТОГО НЕ РАБОТАЕТ -->
+</head>
+<body>
+    <h1 id="status">Ожидание...</h1>
+    <button onclick="callBackend()">Отправить пинг на сервер</button>
+
+    <script>
+        async function callBackend() {
+            // Вызываем функцию, которую мы привязали в C через webui_bind
+            // Это идет через WebSocket
+            const response = await webui.my_backend_func("Привет от браузера!");
+            
+            // Обновляем UI только для этого клиента
+            document.getElementById('status').innerText = response;
+        }
+
+        // Можно также создать слушатель событий, которые сервер рассылает всем
+        // (Например, через webui_run)
+    </script>
+</body>
+</html>
