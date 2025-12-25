@@ -1,0 +1,3 @@
+[submodule "external/webui"]
+	path = external/webui
+	url = https://github.com/webui-dev/webui.git
