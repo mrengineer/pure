@@ -4,26 +4,35 @@
 #include <thread>
 #include <iomanip>
 #include <sstream>
+#include <cstdlib>   // для rand()
+#include <ctime>     // для srand(time(NULL))
 #include "webui.hpp"
 
 // Вспомогательная функция для формирования JS-вызова
-// Генерирует строку вида: update_element('{"dom_id":"...", "payload":"..."}')
 std::string make_js_call(const std::string& dom_id, const std::string& payload) {
     return "update_element(JSON.stringify({dom_id: '" + dom_id + "', payload: '" + payload + "'}));";
 }
 
-// 1. Мониторинг подключений
+// Специальная функция для отправки значения на график
+std::string make_graph_update(const std::string& value) {
+    return "update_graph(" + value + ");";
+}
+
+// Общий обработчик подключения/отключения
 void event_common(webui::window::event* e) {
     if (e->event_type == WEBUI_EVENT_CONNECTED) {
         std::cout << "[ПОДКЛЮЧЕНИЕ] ID: " << e->client_id << std::endl;
-        
-        // Отправляем ID конкретному клиенту
-        std::string js = make_js_call("my-id-display", std::to_string(e->client_id));
-        e->run_client(js);
+
+        std::string welcome = "Добро пожаловать! Ваш ID: " + std::to_string(e->client_id);
+        e->run_client(make_js_call("main-status", welcome));
+        e->run_client(make_js_call("my-id-display", std::to_string(e->client_id)));
+    }
+    else if (e->event_type == WEBUI_EVENT_DISCONNECTED) {
+        std::cout << "[ОТКЛЮЧЕНИЕ] ID: " << e->client_id << std::endl;
     }
 }
 
-// 2. Обработчик команд
+// Обработчик команд от клиента
 void handle_request(webui::window::event* e) {
     std::string command = e->get_string();
     
@@ -37,30 +46,34 @@ void handle_request(webui::window::event* e) {
 }
 
 int main() {
+    std::srand(std::time(nullptr)); // инициализация rand
+
     webui::window my_window;
     
     my_window.set_public(true);
     my_window.set_port(8081);
     webui::set_config(webui_config::multi_client, true);
 
-    // Привязываем функции (без захвата контекста в лямбду)
     my_window.bind("", event_common);
     my_window.bind("handle_request", handle_request);
 
-    // 3. Поток рассылки времени
-    std::thread timer_thread([&my_window]() {
+    // Поток: рассылка времени + значений для графика
+    std::thread updater_thread([&my_window]() {
         while (true) {
+            // Текущее время
             auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
             std::stringstream ss;
             ss << std::put_time(std::localtime(&now), "%H:%M:%S");
-            
-            // Рассылка всем
             my_window.run(make_js_call("timer-display", ss.str()));
-            
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+
+            // Случайное значение для графика (0-100), как в старом main.c
+            int graph_value = std::rand() % 101; // 0..100
+            my_window.run(make_graph_update(std::to_string(graph_value)));
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(500)); // можно менять частоту
         }
     });
-    timer_thread.detach();
+    updater_thread.detach();
 
     my_window.show("index.html");
     webui::wait();
