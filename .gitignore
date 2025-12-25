@@ -19,6 +19,12 @@ Thumbs.db
 # Logs
 *.log
 =======
+external/**/*.o
+external/**/*.a
+external/**/*.so
+external/**/*.lib
+external/**/*.dll
+
 # Prerequisites
 *.d
 
