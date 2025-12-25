@@ -13,6 +13,7 @@ int main() {
     my_window.set_port(8081);
     webui::set_config(folder_monitor, true);
     webui::set_config(multi_client, true);
+    
 
     // 2. Обработчик событий (мониторинг подключений)
     my_window.bind("", [](webui::window::event* e) {
