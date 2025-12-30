@@ -1,3 +1,4 @@
+
 #include <iostream>
 #include <string>
 #include <chrono>
@@ -46,6 +47,10 @@ void handle_request(webui::window::event* e) {
 }
 
 int main() {
+    printf("Program started...\n");
+    fflush(stdout);
+    
+    
     std::srand(std::time(nullptr)); // инициализация rand
 
     webui::window my_window;
@@ -75,7 +80,16 @@ int main() {
     });
     updater_thread.detach();
 
-    my_window.show("index.html");
+    // Запуск в режиме сервера БЕЗ открытия браузера
+    if (!my_window.show_browser("index.html", 0)) {
+        printf("Failed to start server\n");
+        return 1;
+    }
+
+    // Печать URL: преобразуем string_view в std::string
+    std::string url(my_window.get_url());
+    printf("Server started. Access it at: http://<ВАШ_IP>:8081 (Internal: %s)\n", url.c_str());
+
     webui::wait();
     return 0;
 }

@@ -3,9 +3,12 @@
 build/
 CMakeCache.txt
 CMakeFiles/
+sysroot/
 Makefile
 cmake_install.cmake
-server
+pure
+
+
 
 # IDE files
 .vscode/

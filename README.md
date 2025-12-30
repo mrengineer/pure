@@ -23,18 +23,14 @@ All logic stays in C++, while the interface is displayed in the browser.
 ├── main.cpp                # Основной код приложения
 ├── index.html              # Веб-интерфейс
 ├── smoothie.js             # Библиотека для графика
-└── ...                     # Другие файлы (webui.hpp и т.д.)
+
 
 
 
 ## Компиляция / Compilation
 
-### Рекомендуемый способ: через CMake и make
 
-```bash
-mkdir build
-cd build
-cmake ..
-make
-./pure
 
+sudo rm -rf build/
+
+docker run --rm -v $(pwd):/app pizero-stable-builder
