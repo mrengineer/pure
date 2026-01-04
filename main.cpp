@@ -41,7 +41,7 @@ void apply_pwm(const std::string& id, const ControlParam& p) {
     int val = std::get<int>(p.value);
     // Для GPIO 18 используем Hardware PWM, для остальных обычный
     if (p.gpio_pin == 18) {
-        gpioHardwarePWM(p.gpio_pin, 25000, val * 10000);
+        gpioHardwarePWM(p.gpio_pin, 100, val * 10000);
     } else {
         gpioPWM(p.gpio_pin, (int)(val * 2.55));
     }
@@ -111,7 +111,11 @@ void event_common(webui::window::event* e) {
 }
 
 int main() {
-    if (gpioInitialise() < 0) return 1;
+    if (gpioInitialise() < 0) {
+        std::cerr << "pigpio initialisation failed." << std::endl;
+        return 1;
+    }
+
 
     webui::window my_window;
     my_window.set_public(true);

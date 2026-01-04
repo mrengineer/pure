@@ -28,10 +28,23 @@
             <div class="card p-4">
                 <h4 class="mb-4">Параметры системы</h4>
                 
-                <!-- INT: Спиннер -->
+                <!-- INT: Спиннер 
                 <div class="mb-3 row">
                     <label class="col-6 col-form-label">Обороты вентилятора (INT)</label>
                     <div class="col-6"><input type="number" id="fan_speed" class="form-control" onchange="ui_send(this)"></div>
+                </div -->
+
+                <!-- INT: Слайдер -->
+                <div class="mb-3 row">
+                    <label class="col-6 col-form-label">
+                        Обороты вентилятора: <span id="fan_speed_val" class="fw-bold text-primary">0</span>
+                    </label>
+                    <div class="col-6">
+                        <input type="range" id="fan_speed" class="form-range" 
+                            min="0" max="100" step="1" 
+                            oninput="document.getElementById('fan_speed_val').innerText = this.value" 
+                            onchange="ui_send(this)">
+                    </div>
                 </div>
 
                 <!-- FLOAT: Поле ввода -->
