@@ -1,62 +1,76 @@
 cmake_minimum_required(VERSION 3.10)
 
-set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-set(BUILD_SHARED_LIBS OFF)
-
 project(pure CXX)
 
 # Настройки стандарта C++
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Ручное исправление ошибки pigpio с библиотекой RT
-set(RT_LIBRARIES "-lrt" CACHE STRING "" FORCE)
-set(RT_FOUND TRUE CACHE BOOL "" FORCE)
-
-set(WEBUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE) # Отключаем примеры
-set(WEBUI_BUILD_STATIC ON CACHE BOOL "" FORCE) # Включаем статическую сборку WebUI
-set(BUILD_TESTING OFF CACHE BOOL "" FORCE)  # Добавьте эту строку для pigpio
-
-
-# 1. Настройка субмодулей
-# Включаем сборку статической версии WebUI (важно для Pi Zero)
+# --- ОБЩИЕ НАСТРОЙКИ ---
+set(WEBUI_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(WEBUI_BUILD_STATIC ON CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE) # В pigpio отключаем сборку shared библиотек
+set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
-# Добавляем папки субмодулей
+# 1. WebUI нужен для обеих платформ
 add_subdirectory(external/webui)
-add_subdirectory(external/pigpio)
 
-# 2. Создание исполняемого файла
+# 2. Условная настройка PIGPIO (только для ARM)
+# В докере для Pi Zero переменная CMAKE_SYSTEM_PROCESSOR будет "arm"
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
+    message(STATUS ">>> ARM DETECTED: Including PIGPIO")
+    
+    # Исправление для библиотеки RT в старых версиях pigpio
+    set(RT_LIBRARIES "-lrt" CACHE STRING "" FORCE)
+    set(RT_FOUND TRUE CACHE BOOL "" FORCE)
+    
+    add_subdirectory(external/pigpio)
+    set(PIGPIO_LIBRARIES pigpio rt)
+    add_definitions(-DUSE_PIGPIO) # Прокидываем макрос в код
+else()
+    message(STATUS ">>> X86 DETECTED: Skipping PIGPIO (using MOCKS)")
+    set(PIGPIO_LIBRARIES "")
+endif()
+
+# 3. Создание исполняемого файла
 add_executable(${PROJECT_NAME} main.cpp)
 
-# 3. Пути к заголовочным файлам (include)
+# 4. Пути к заголовочным файлам
 target_include_directories(${PROJECT_NAME} PRIVATE 
     external/webui/include
-    external/pigpio
 )
 
-# 4. Флаги компиляции и линковки
-# -static-libgcc и -static-libstdc++ включают стандартные библиотеки внутрь файла
-set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++ -static")
+# Если ARM, добавляем заголовки pigpio
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
+    target_include_directories(${PROJECT_NAME} PRIVATE external/pigpio)
+endif()
 
-# Поиск системных потоков (pthread)
+# 5. Флаги линковки (для Pi Zero важна статика)
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
+    set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
+endif()
+
 find_package(Threads REQUIRED)
 
-# 5. Линковка библиотек
-# Используем имена целей (targets), которые создают субмодули
+# 6. Линковка библиотек
 target_link_libraries(${PROJECT_NAME} PRIVATE 
-    webui           # Пробуем основное имя
-    pigpio
+    webui
+    ${PIGPIO_LIBRARIES}
     Threads::Threads
-    rt
     ${CMAKE_DL_LIBS}
 )
 
-# 6. Копирование интерфейса в папку с бинарником
-# Чтобы index.html лежал рядом с файлом pure
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy
-    "${CMAKE_CURRENT_SOURCE_DIR}/index.html"
-    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/index.html"
+# 7. Копирование ресурсов (index.html, bootstrap.min.css, smoothie.js)
+set(RESOURCES 
+    "index.html" 
+    "bootstrap.min.css" 
+    "smoothie.js"
 )
+
+foreach(RES ${RESOURCES})
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy
+        "${CMAKE_CURRENT_SOURCE_DIR}/${RES}"
+        "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${RES}"
+    )
+endforeach()

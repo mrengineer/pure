@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Air purefier control</title>
+    <meta charset="UTF-8">
+    <!-- Локальные пути вместо CDN -->
+    <link href="bootstrap.min.css" rel="stylesheet">
+    <script src="webui.js"></script>
+    <script src="smoothie.js"></script>
+    <style>
+        body { background: #eceff1; font-family: sans-serif; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        #graph { width: 100%; height: 180px; background: #000; border-radius: 8px; }
+    </style>
+</head>
+<body class="container py-4">
+    <div class="row g-4">
+        <!-- Левая колонка: Мониторинг -->
+        <div class="col-md-5">
+            <div class="card p-3 mb-4">
+                <h5 id="timer-display" class="text-primary text-center">--:--:--</h5>
+                <canvas id="graph"></canvas>
+            </div>
+        </div>
+
+        <!-- Правая колонка: Управление (Абстрактные элементы) -->
+        <div class="col-md-7">
+            <div class="card p-4">
+                <h4 class="mb-4">Параметры системы</h4>
+                
+                <!-- INT: Спиннер 
+                <div class="mb-3 row">
+                    <label class="col-6 col-form-label">Обороты вентилятора (INT)</label>
+                    <div class="col-6"><input type="number" id="fan_speed" class="form-control" onchange="ui_send(this)"></div>
+                </div -->
+
+                <!-- INT: Слайдер -->
+                <div class="mb-3 row">
+                    <label class="col-6 col-form-label">
+                        Обороты вентилятора: <span id="fan_speed_val" class="fw-bold text-primary">0</span>
+                    </label>
+                    <div class="col-6">
+                        <input type="range" id="fan_speed" class="form-range" 
+                            min="0" max="100" step="1" 
+                            oninput="document.getElementById('fan_speed_val').innerText = this.value" 
+                            onchange="ui_send(this)">
+                    </div>
+                </div>
+
+                <!-- FLOAT: Поле ввода -->
+                <div class="mb-3 row">
+                    <label class="col-6 col-form-label">Порог темп. (FLOAT)</label>
+                    <div class="col-6"><input type="number" step="0.1" id="target_temp" class="form-control" onchange="ui_send(this)"></div>
+                </div>
+
+                <!-- ENUM: Комбобокс -->
+                <div class="mb-3 row">
+                    <label class="col-6 col-form-label">Режим работы (ENUM)</label>
+                    <div class="col-6">
+                        <select id="work_mode" class="form-select" onchange="ui_send(this)">
+                            <option value="0">Эко</option>
+                            <option value="1">Стандарт</option>
+                            <option value="2">Турбо</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- STRING: Строка -->
+                <div class="mb-3 row">
+                    <label class="col-6 col-form-label">Имя станции (STRING)</label>
+                    <div class="col-6"><input type="text" id="station_name" class="form-control" onchange="ui_send(this)"></div>
+                </div>
+
+                <!-- BOOL: Checkbox/Switch -->
+                <div class="form-check form-switch mt-4">
+                    <input class="form-check-input" type="checkbox" id="system_ready" onchange="ui_send(this)">
+                    <label class="form-check-label">Система активна (BOOL)</label>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // График
+        var ts = new TimeSeries();
+        var sc = new SmoothieChart({responsive:true, grid:{fillStyle:'#111', strokeStyle:'#333'}});
+        sc.addTimeSeries(ts, {strokeStyle:'#00ff00', fillStyle:'rgba(0,255,0,0.1)'});
+        sc.streamTo(document.getElementById("graph"), 2000);
+
+        // Универсальный JS обработчик
+        function ui_send(el) {
+            let val = (el.type === 'checkbox') ? el.checked : el.value;
+            webui.handle_update(el.id + ":" + val);
+        }
+
+        function set_ui_value(id, val) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (el.type === 'checkbox') el.checked = (val === 'true');
+            else el.value = val;
+        }
+
+        function update_element(json) {
+            const d = JSON.parse(json);
+            const el = document.getElementById(d.dom_id);
+            if (el) el.innerText = d.payload;
+        }
+
+        function update_graph(v) { ts.append(new Date().getTime(), v); }
+    </script>
+</body>
+</html>
