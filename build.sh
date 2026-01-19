@@ -2,8 +2,14 @@
 
 set -e
 
+
+# Инициализация и обновление подмодулей git
+git submodule update --init --recursive
+
+
 # --- 1. СБОРКА ПОД UBUNTU (x86_64) ---
 echo "Сборка под x86_64..."
+sudo rm -rf build_x86
 mkdir -p build_x86
 cd build_x86
 /usr/bin/cmake ..
@@ -18,7 +24,7 @@ cd ..
 # Активация эмулятора в Docker
 #docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
 
-docker build -t pizero-stable-builder .
+#docker build -t pizero-stable-builder .
 sudo rm -rf build/
 docker run --rm -v $(pwd):/app pizero-stable-builder
 

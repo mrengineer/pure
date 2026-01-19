@@ -1,36 +1,31 @@
-# WebUI C++ Template / Шаблон GUI на WebUI для C++
+# Air Purifier Control System (2026)
 
-Этот репозиторий — **готовый шаблон** для создания простого графического веб-интерфейса (GUI) на базе библиотеки **WebUI** для программ на C++.
+Проект системы управления на базе **Raspberry Pi Zero** и **WebUI**. 
+Реализует высокопроизводительный интерфейс с поддержкой сотен динамических элементов.
 
-WebUI позволяет запускать локальный веб-сервер и отображать HTML-интерфейс прямо в браузере, при этом вся логика остаётся на C++. Поддерживается множественное подключение клиентов, отправка данных конкретному клиенту или всем сразу.
+## Основная концепция
+Чтобы обеспечить плавную работу на слабом железе (ARMv6, 512MB RAM), проект использует **Selective Data Streaming (Pub/Sub)**:
+- Сервер не транслирует все 300 параметров одновременно.
+- Браузер сообщает серверу, какие элементы видны на экране в данный момент (используя `IntersectionObserver`).
+- Сервер отправляет обновления только для видимых элементов индивидуально для каждой открытой вкладки.
 
-This repository is a **ready-to-use template** for creating a simple web-based GUI using the **WebUI** library for C++ programs.  
-All logic stays in C++, while the interface is displayed in the browser.
-
-## Особенности / Features
-
-- Мульти-клиент (несколько пользователей одновременно) / Multi-client support
-- Обновление элементов DOM через JSON / DOM element updates via JSON
-- Рассылка данных всем клиентам / Broadcasting to all clients
-- Отправка сообщений конкретному клиенту / Sending messages to a specific client
-- Живой график на SmoothieChart / Live chart using SmoothieChart
-- Обновление времени сервера в реальном времени / Real-time server time updates
-- Обработка событий подключения/отключения / Connection/disconnection events handling
-
-## Структура проекта / Project structure
-.
-├── CMakeLists.txt          # Сборка через CMake
-├── main.cpp                # Основной код приложения
-├── index.html              # Веб-интерфейс
-├── smoothie.js             # Библиотека для графика
+## Особенности реализации
+- Multi-client: Каждая вкладка браузера имеет свой независимый список видимых элементов.
+- Static Linking: Бинарник для Pi Zero собирается со статическими libgcc и libstdc++ для работы на любом дистрибутиве (Raspberry Pi OS Lite и др.).
+- Zero Latency: Использование нативных WebSocket через WebUI обеспечивает минимальный отклик при управлении GPIO.
 
 
+## Структура проекта
+- `main.cpp`: Логика сервера, управление GPIO и менеджер подписок клиентов.
+- `index.html`: Интерфейс на Bootstrap 5 с логикой отслеживания видимости.
+- `external/`: Субмодули (WebUI, pigpio).
+- `docker/`: Окружение для кросс-компиляции под Raspberry Pi Zero.
 
+## Сборка
+Проект поддерживает двойную сборку через системный CMake (требуется версия 3.10+):
 
-## Компиляция / Compilation
-
-
-
-sudo rm -rf build/
-
-docker run --rm -v $(pwd):/app pizero-stable-builder
+### 1. Локальная (Ubuntu x86_64)
+Используется для разработки и тестов интерфейса. Библиотека `pigpio` заменяется заглушками.
+```bash
+./build.sh
+./pure

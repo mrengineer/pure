@@ -1,6 +1,8 @@
 <<<<<<< HEAD
 # Build artifacts
 build/
+build_x86/
+build_*/
 CMakeCache.txt
 CMakeFiles/
 sysroot/

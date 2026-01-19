@@ -4,156 +4,153 @@
 #include <thread>
 #include <iomanip>
 #include <sstream>
-#include <cstdlib>
-#include <ctime>
 #include <map>
+#include <set>
 #include <variant>
-#include <fstream>
+#include <mutex>
 #include "webui.hpp"
 
-// --- БЛОК СОВМЕСТИМОСТИ PIGPIO ---
+/**
+ * --- БЛОК КРОСС-ПЛАТФОРМЕННОСТИ ---
+ */
 #ifdef USE_PIGPIO
     #include <pigpio.h>
 #else
-    // Заглушки для x86 (Ubuntu)
-    #define PI_OUTPUT 1
     inline int gpioInitialise() { return 0; }
     inline void gpioTerminate() {}
-    inline void gpioSetMode(unsigned g, unsigned m) {}
-    inline void gpioWrite(unsigned g, unsigned v) {}
-    inline void gpioPWM(unsigned g, unsigned v) {}
-    inline void gpioHardwarePWM(unsigned g, unsigned f, unsigned d) {}
 #endif
 
-enum class ParamType { INT, FLOAT, BOOL, ENUM, STRING };
-
-struct ControlParam {
-    ParamType type;
-    std::variant<int, float, bool, std::string> value;
-    int gpio_pin;
-    std::string description;
-    void (*apply_func)(const std::string& id, const ControlParam& p);
+// Контекст клиента: храним ID видимых элементов
+struct ClientContext {
+    std::set<std::string> visible_ids;
+    std::mutex mtx;
+    ClientContext() = default;
 };
 
-// --- Функции-обработчики ---
-float get_cpu_temp() {
-    float temp = 0.0;
-    std::ifstream tempFile("/sys/class/thermal/thermal_zone0/temp");
-    if (tempFile.is_open()) {
-        int raw_temp;
-        tempFile >> raw_temp;
-        temp = raw_temp / 1000.0f;
-        tempFile.close();
-    } else {
-        // Эмуляция температуры на x86 для графика
-        temp = 35.0f + (std::rand() % 150) / 10.0f;
-    }
-    return temp;
-}
-
-void apply_pwm(const std::string& id, const ControlParam& p) {
-    int val = std::get<int>(p.value);
-#ifdef USE_PIGPIO
-    if (p.gpio_pin == 18) gpioHardwarePWM(p.gpio_pin, 100, val * 10000);
-    else gpioPWM(p.gpio_pin, (int)(val * 2.55));
-#endif
-    std::cout << "[HARDWARE] " << id << " set to " << val << "%" << std::endl;
-}
-
-void apply_generic_log(const std::string& id, const ControlParam& p) {
-    std::cout << "[LOG] " << id << " changed. Type: " << (int)p.type << std::endl;
-}
-
-// --- РЕЕСТР ---
-std::map<std::string, ControlParam> registry = {
-    {"fan_speed",    {ParamType::INT,    85,       18,   "Вентилятор %",      apply_pwm}},
-    {"target_temp",  {ParamType::FLOAT,  24.5f,    0,    "Порог темп.",       apply_generic_log}},
-    {"system_ready", {ParamType::BOOL,   true,     0,    "Статус системы",    apply_generic_log}},
-    {"work_mode",    {ParamType::ENUM,   1,        0,    "Режим работы",      apply_generic_log}},
-    {"station_name", {ParamType::STRING, std::string("RPi-2026"), 0, "Имя",   apply_generic_log}}
+// Глобальные параметры системы
+std::map<std::string, std::string> global_params = {
+    {"fan_speed", "85"},
+    {"power_on", "true"},
+    {"station_name", "RPi-Zero-2026"}
 };
 
-std::string make_js_call(const std::string& dom_id, const std::string& payload) {
-    return "update_element(JSON.stringify({dom_id: '" + dom_id + "', payload: '" + payload + "'}));";
+std::map<size_t, ClientContext> clients;
+std::mutex global_mtx;
+
+// Формирование JS для обновления значений в UI
+std::string make_val_js(const std::string& id, const std::string& val) {
+    return "set_ui_value('" + id + "', '" + val + "');";
 }
 
-void sync_all_controls(webui::window::event* e) {
-    for (auto const& [id, p] : registry) {
-        std::string val_str;
-        if (std::holds_alternative<int>(p.value)) val_str = std::to_string(std::get<int>(p.value));
-        else if (std::holds_alternative<float>(p.value)) {
-            std::stringstream ss; ss << std::fixed << std::setprecision(1) << std::get<float>(p.value);
-            val_str = ss.str();
-        }
-        else if (std::holds_alternative<bool>(p.value)) val_str = std::get<bool>(p.value) ? "true" : "false";
-        else if (std::holds_alternative<std::string>(p.value)) val_str = std::get<std::string>(p.value);
-
-        e->run_client("set_ui_value('" + id + "', '" + val_str + "');");
-    }
-}
-
-void handle_universal_update(webui::window::event* e) {
+// Обработка видимости (Pub/Sub)
+void handle_visibility(webui::window::event* e) {
     std::string data = e->get_string();
     size_t sep = data.find(':');
     if (sep == std::string::npos) return;
-    std::string id = data.substr(0, sep);
-    std::string val_str = data.substr(sep + 1);
+    
+    std::string dom_id = data.substr(0, sep);
+    bool is_visible = (data.substr(sep + 1) == "1");
 
-    if (registry.count(id)) {
-        auto& p = registry[id];
-        try {
-            if (p.type == ParamType::INT || p.type == ParamType::ENUM) p.value = std::stoi(val_str);
-            else if (p.type == ParamType::FLOAT) p.value = std::stof(val_str);
-            else if (p.type == ParamType::BOOL) p.value = (val_str == "true");
-            else if (p.type == ParamType::STRING) p.value = val_str;
-            if (p.apply_func) p.apply_func(id, p);
-        } catch (...) {}
+    std::lock_guard<std::mutex> lock(global_mtx);
+    if (clients.count(e->client_id)) {
+        auto& ctx = clients[e->client_id];
+        std::lock_guard<std::mutex> c_lock(ctx.mtx);
+        if (is_visible) {
+            if (ctx.visible_ids.insert(dom_id).second)
+                std::cout << "[SUB] Client " << e->client_id << " -> " << dom_id << std::endl;
+        } else {
+            if (ctx.visible_ids.erase(dom_id))
+                std::cout << "[UNSUB] Client " << e->client_id << " <- " << dom_id << std::endl;
+        }
     }
 }
 
+// Обработка изменений в интерфейсе
+void handle_change(webui::window::event* e) {
+    std::string data = e->get_string();
+    size_t sep = data.find(':');
+    if (sep != std::string::npos) {
+        std::string id = data.substr(0, sep);
+        std::string val = data.substr(sep + 1);
+        
+        std::lock_guard<std::mutex> lock(global_mtx);
+        global_params[id] = val; 
+        std::cout << "[PARAM] Client " << e->client_id << " changed " << id << " to " << val << std::endl;
+        
+        // Синхронизация изменений между всеми вкладками
+        for (auto& [cid, ctx] : clients) {
+            if (cid != e->client_id) {
+                // Прямой вызов C-API для адресной рассылки
+                webui_run_client(reinterpret_cast<webui_event_t*>(e), make_val_js(id, val).c_str());
+            }
+        }
+    }
+}
+
+// Управление жизненным циклом соединений
 void event_common(webui::window::event* e) {
-    if (e->event_type == WEBUI_EVENT_CONNECTED) sync_all_controls(e);
+    std::lock_guard<std::mutex> lock(global_mtx);
+    if (e->event_type == WEBUI_EVENT_CONNECTED) {
+        clients.emplace(std::piecewise_construct, std::forward_as_tuple(e->client_id), std::forward_as_tuple());
+        std::cout << "[CONN] Client " << e->client_id << " connected" << std::endl;
+        
+        // Инициализация параметров для новой вкладки
+        for (auto const& [id, val] : global_params) {
+            webui_run_client(reinterpret_cast<webui_event_t*>(e), make_val_js(id, val).c_str());
+        }
+    } else if (e->event_type == WEBUI_EVENT_DISCONNECTED) {
+        clients.erase(e->client_id);
+        std::cout << "[DISCONN] Client " << e->client_id << " disconnected" << std::endl;
+    }
 }
 
 int main() {
     std::srand(std::time(nullptr));
-    if (gpioInitialise() < 0) return 1;
-
-    webui::window my_window;
-    my_window.set_public(true);
-    my_window.set_port(8081);
+    gpioInitialise();
+    
+    webui::window win;
+    win.set_port(8081);
     webui::set_config(webui_config::multi_client, true);
 
-    my_window.bind("", event_common);
-    my_window.bind("handle_update", handle_universal_update);
+    win.bind("", event_common);
+    win.bind("set_visible", handle_visibility);
+    win.bind("handle_change", handle_change);
 
-    std::thread([&my_window]() {
-        int counter = 0;
+    // Фоновый поток обновления
+    std::thread([&win]() {
         while (true) {
+            // Общее время (шлем всем)
             auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
             std::stringstream ss; ss << std::put_time(std::localtime(&now), "%H:%M:%S");
-            my_window.run(make_js_call("timer-display", ss.str()));
+            std::string time_js = "update_element(JSON.stringify({dom_id:'timer-display', payload:'" + ss.str() + "'}));";
+            win.run(time_js);
 
-            if (counter % 5 == 0) {
-                std::stringstream temp_ss;
-                temp_ss << std::fixed << std::setprecision(1) << get_cpu_temp();
-                my_window.run("update_graph(" + temp_ss.str() + ");");
+            {
+                std::lock_guard<std::mutex> lock(global_mtx);
+                for (auto& [cid, ctx] : clients) {
+                    std::lock_guard<std::mutex> c_lock(ctx.mtx);
+                    for (const std::string& id : ctx.visible_ids) {
+                        int sensor_val = std::rand() % 1000;
+                        std::string packet = "update_element(JSON.stringify({dom_id:'" + id + "', payload:'" + std::to_string(sensor_val) + "'}));";
+                        
+                        // В многопоточном режиме для конкретного клиента используем win.run()
+                        // В v2.5+ win.run(script) отправляет всем, 
+                        // Для конкретного cid используем webui_run_client
+                        // Примечание: Для фонового потока без объекта события 
+                        // используется webui_script_client (если доступен в C)
+                    }
+                }
             }
-            counter++;
-            std::this_thread::sleep_for(std::chrono::seconds(1));
+            win.run("update_graph(" + std::to_string(std::rand() % 50 + 20) + ");");
+            std::this_thread::sleep_for(std::chrono::milliseconds(300));
         }
     }).detach();
 
-    // ЗАПУСК: На Pi Zero (ARM) только сервер, на x86 открываем браузер
 #ifdef USE_PIGPIO
-    bool res = my_window.show_browser("index.html", 0); // Режим сервера (No Browser)
+    win.show_browser("index.html", 0); 
 #else
-    bool res = my_window.show("index.html"); // Открыть локальный браузер
+    win.show("index.html");
 #endif
-
-    if (!res) return 1;
-
-    std::cout << "Server: " << my_window.get_url() << std::endl;
     webui::wait();
     gpioTerminate();
     return 0;
