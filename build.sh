@@ -7,14 +7,26 @@ set -e
 git submodule update --init --recursive
 
 
+# --- ASAN DEBUG BUILD ---
+echo "Сборка x86_64 + AddressSanitizer..."
+
+rm -rf build_x86_asan
+mkdir -p build_x86_asan
+
+cmake -S . -B build_x86_asan \
+  -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_CXX_FLAGS="-fsanitize=address -fno-omit-frame-pointer"
+cmake --build build_x86_asan -- -j$(nproc)
+
+
 # --- 1. СБОРКА ПОД UBUNTU (x86_64) ---
-echo "Сборка под x86_64..."
-sudo rm -rf build_x86
-mkdir -p build_x86
-cd build_x86
-/usr/bin/cmake ..
-make -j$(nproc)
-cd ..
+#echo "Сборка под x86_64..."
+#sudo rm -rf build_x86
+#mkdir -p build_x86
+#cd build_x86
+#/usr/bin/cmake ..
+#make -j$(nproc)
+#cd ..
 
 
 

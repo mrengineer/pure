@@ -15,6 +15,12 @@ set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 # 1. WebUI нужен для обеих платформ
 add_subdirectory(external/webui)
 
+
+# Aддитивные флаги компиляции для отладки
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+    add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+
 # 2. Условная настройка PIGPIO (только для ARM)
 # В докере для Pi Zero переменная CMAKE_SYSTEM_PROCESSOR будет "arm"
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
