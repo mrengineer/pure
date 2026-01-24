@@ -19,12 +19,19 @@
         #timer-display { font-weight: bold; font-family: monospace; color: #0d6efd; min-width: 80px; }
         .nav-tabs .nav-link { color: #6c757d; border: none; }
         .nav-tabs .nav-link.active { color: #0d6efd; border-bottom: 2px solid #0d6efd; background: none; }
+        #clients-count { min-width: 25px; text-align: center; }
     </style>
 </head>
 <body class="container py-4">
     <div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded card">
         <h4 class="m-0">Pureifier System</h4>
         <div class="d-flex align-items-center">
+            <!-- Счетчик активных клиентов -->
+            <div class="me-3 border-end pe-3 d-none d-sm-flex align-items-center">
+                <small class="text-muted me-2">Clients:</small>
+                <span id="clients-count" class="badge rounded-pill bg-light text-primary border">1</span>
+            </div>
+            
             <span id="timer-display" class="me-3">00:00:00</span>
             <span class="badge bg-success">ONLINE</span>
         </div>
@@ -41,7 +48,7 @@
             <div class="card p-3">
                 <h6 class="mb-3 border-bottom pb-2">Датчики (300 ед.)</h6>
                 <div id="sensor-container" class="scroll-list">
-                    <!-- Заполняется динамически -->
+                    <!-- Заполняется динамически через JS -->
                 </div>
             </div>
         </div>
@@ -105,44 +112,46 @@
         // 2. Intersection Observer (Механизм Pub/Sub)
         const observer = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
-                // Из ID строки row-1 получаем ID значения val-1
                 const valId = entry.target.id.replace('row-', 'val-');
                 const isVisible = entry.isIntersecting ? "1" : "0";
-                
-                // Сообщаем серверу о подписке/отписке
-                webui.set_visible(`${valId}:${isVisible}`);
+                // Сообщаем серверу о подписке/отписке (WebUI handle)
+                if (typeof webui !== 'undefined') {
+                    webui.set_visible(`${valId}:${isVisible}`);
+                }
             });
         }, { root: container, threshold: 0.1 });
 
-        // Начинаем слежку за всеми строками
         document.querySelectorAll('.sensor-item').forEach(item => observer.observe(item));
 
         // 3. Взаимодействие с C++
         function ui_change(el) {
             let val = (el.type === 'checkbox') ? el.checked : el.value;
-            // Обновляем текст рядом со слайдером локально
             if(el.id === 'fan_speed') document.getElementById('fan_speed_txt').innerText = val + '%';
-            // Шлем на сервер
-            webui.handle_change(`${el.id}:${val}`);
+            if (typeof webui !== 'undefined') {
+                webui.handle_change(`${el.id}:${val}`);
+            }
         }
 
-        // Вызывается сервером при подключении или синхронизации
+        // Вызывается сервером при синхронизации
         function set_ui_value(id, val) {
             const el = document.getElementById(id);
             if (!el) return;
             if (el.type === 'checkbox') {
-                el.checked = (val === 'true');
+                el.checked = (val === 'true' || val === true);
             } else {
                 el.value = val;
                 if(id === 'fan_speed') document.getElementById('fan_speed_txt').innerText = val + '%';
             }
         }
 
-        // Вызывается сервером для обновления текста (таймер, значения датчиков)
+        // Универсальная функция обновления текста (таймер, датчики, КЛИЕНТЫ)
+        // Пример JSON от сервера: {"dom_id": "clients-count", "payload": "3"}
         function update_element(json) {
-            const data = JSON.parse(json);
-            const el = document.getElementById(data.dom_id);
-            if (el) el.innerText = data.payload;
+            try {
+                const data = JSON.parse(json);
+                const el = document.getElementById(data.dom_id);
+                if (el) el.innerText = data.payload;
+            } catch(e) { console.error("JSON parse error", e); }
         }
 
         // 4. Графики (SmoothieChart)

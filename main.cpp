@@ -98,9 +98,12 @@ void event_common(webui::window::event* e) {
         for (auto const& [id, val] : global_params) {
             webui_run_client(reinterpret_cast<webui_event_t*>(e), make_val_js(id, val).c_str());
         }
+        e->get_window().run("update_element(JSON.stringify({dom_id:'clients-count', payload:'" + std::to_string(clients.size()) + "'}));");
+
     } else if (e->event_type == WEBUI_EVENT_DISCONNECTED) {
         clients.erase(e->client_id);
         std::cout << "[DISCONN] Client " << e->client_id << " disconnected" << std::endl;
+        e->get_window().run("update_element(JSON.stringify({dom_id:'clients-count', payload:'" + std::to_string(clients.size()) + "'}));");
     }
 }
 
@@ -111,6 +114,10 @@ int main() {
     webui::window win;
     win.set_port(8081);
     webui::set_config(webui_config::multi_client, true);
+    // Для корректной идентификации отдельных клиентов включаем cookies
+    webui::set_config(webui_config::use_cookies, true);
+    // Не завершать приложение при отсутствии клиентов (ожидать бесконечно)
+    webui::set_timeout(0);
 
     win.bind("", event_common);
     win.bind("set_visible", handle_visibility);
@@ -124,6 +131,13 @@ int main() {
             std::stringstream ss; ss << std::put_time(std::localtime(&now), "%H:%M:%S");
             std::string time_js = "update_element(JSON.stringify({dom_id:'timer-display', payload:'" + ss.str() + "'}));";
             win.run(time_js);
+
+            // Количество клиентов
+            {
+                std::lock_guard<std::mutex> lock(global_mtx);
+                win.run("update_element(JSON.stringify({dom_id:'clients-count', payload:'" + std::to_string(clients.size()) + "'}));");
+            }
+
 
             {
                 std::lock_guard<std::mutex> lock(global_mtx);
@@ -146,11 +160,9 @@ int main() {
         }
     }).detach();
 
-#ifdef USE_PIGPIO
+
     win.show_browser("index.html", 0); 
-#else
-    win.show("index.html");
-#endif
+
     webui::wait();
     gpioTerminate();
     return 0;
