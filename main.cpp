@@ -24,6 +24,7 @@
 struct ClientContext {
     std::set<std::string> visible_ids;
     std::mutex mtx;
+    size_t connection_id = 0;
     ClientContext() = default;
 };
 
@@ -77,13 +78,8 @@ void handle_change(webui::window::event* e) {
         global_params[id] = val; 
         std::cout << "[PARAM] Client " << e->client_id << " changed " << id << " to " << val << std::endl;
         
-        // Синхронизация изменений между всеми вкладками
-        for (auto& [cid, ctx] : clients) {
-            if (cid != e->client_id) {
-                // Прямой вызов C-API для адресной рассылки
-                webui_run_client(reinterpret_cast<webui_event_t*>(e), make_val_js(id, val).c_str());
-            }
-        }
+        // Синхронизация изменений между всеми вкладками (рассылаем всем подключённым)
+        e->get_window().run(make_val_js(id, val));
     }
 }
 
@@ -92,6 +88,8 @@ void event_common(webui::window::event* e) {
     std::lock_guard<std::mutex> lock(global_mtx);
     if (e->event_type == WEBUI_EVENT_CONNECTED) {
         clients.emplace(std::piecewise_construct, std::forward_as_tuple(e->client_id), std::forward_as_tuple());
+        // Save connection_id for targeted messages
+        clients[e->client_id].connection_id = e->connection_id;
         std::cout << "[CONN] Client " << e->client_id << " connected" << std::endl;
         
         // Инициализация параметров для новой вкладки
